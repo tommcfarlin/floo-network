@@ -1,11 +1,11 @@
 const CACHE_NAME = 'floo-v1';
 
 const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/styles.css',
-  '/app.js',
-  '/manifest.json'
+  './',
+  './index.html',
+  './styles.css',
+  './app.js',
+  './manifest.json'
 ];
 
 /**
@@ -86,7 +86,7 @@ async function cacheFirst(request) {
     // Offline and not in cache — return a basic offline response
     // for navigation requests so the user sees something, not nothing.
     if (request.mode === 'navigate') {
-      return caches.match('/index.html');
+      return caches.match('./index.html');
     }
     return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
   }
