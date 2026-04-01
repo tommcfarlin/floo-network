@@ -1,0 +1,443 @@
+/*
+ * Floo — Base styles
+ * Mobile-first. Safari PWA primary target.
+ */
+
+/* ---- Reset & box model ---- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---- Root variables ---- */
+
+:root {
+  --color-bg: #ffffff;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #6b7280;
+  --color-accent: #f97316;
+  --color-accent-hover: #ea580c;
+  --color-border: #e5e7eb;
+  --color-surface: #f9fafb;
+  --color-error: #dc2626;
+  --color-success: #16a34a;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #111111;
+    --color-text: #f0f0f0;
+    --color-text-secondary: #9ca3af;
+    --color-accent: #fb923c;
+    --color-accent-hover: #f97316;
+    --color-border: #2d2d2d;
+    --color-surface: #1a1a1a;
+    --color-error: #f87171;
+    --color-success: #4ade80;
+  }
+}
+
+/* ---- Base ---- */
+
+html {
+  font-family: var(--font-stack);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--safe-top);
+  padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+
+  /* Prevent overscroll revealing white background in standalone mode */
+  overscroll-behavior: none;
+}
+
+/* ---- App header ---- */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-header h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+/* ---- Main content ---- */
+
+.app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 1rem 1.25rem;
+}
+
+/* ---- App footer ---- */
+
+.app-footer {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.app-footer p {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+/* ---- Utility: prevent text selection on UI controls ---- */
+
+[role="button"],
+button {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ---- Ensure minimum touch targets ---- */
+
+button,
+[role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* ---- Buttons ---- */
+
+.header-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
+}
+
+.header-btn:active {
+  opacity: 0.7;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
+  transition: background-color 0.15s ease;
+}
+
+.btn-primary {
+  width: 100%;
+  background-color: var(--color-accent);
+  color: #ffffff;
+}
+
+.btn-primary:active {
+  background-color: var(--color-accent-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- Login form ---- */
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.login-heading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.config-section {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.config-section summary {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.config-section[open] summary {
+  margin-bottom: 0.75rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.form-group input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+
+.form-group input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+
+.error-message {
+  font-size: 0.875rem;
+  color: var(--color-error);
+  text-align: center;
+  padding: 0.5rem;
+}
+
+/* ---- List toolbar ---- */
+
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.toolbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  overflow: hidden;
+}
+
+.user-email {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-count {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+/* ---- Fetch error ---- */
+
+.fetch-error {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  border: 1px solid var(--color-error);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.fetch-error p {
+  font-size: 0.9375rem;
+  color: var(--color-error);
+}
+
+/* ---- Loading indicator ---- */
+
+.loading {
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.loading p {
+  color: var(--color-text-secondary);
+  font-size: 0.9375rem;
+}
+
+/* ---- Tabs list ---- */
+
+.tabs-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  transition: opacity 0.2s ease;
+}
+
+.tab-item:last-child {
+  border-bottom: none;
+}
+
+.tab-link {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.875rem 0;
+  min-height: 44px;
+  text-decoration: none;
+  color: inherit;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.05);
+}
+
+.tab-link:active {
+  opacity: 0.7;
+}
+
+.tab-title {
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tab-meta {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  line-height: 1.3;
+}
+
+.tab-domain {
+  /* inherits color from .tab-meta */
+}
+
+.tab-time {
+  /* inherits color from .tab-meta */
+}
+
+/* ---- Mark as read button ---- */
+
+.btn-mark-read {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-mark-read:active {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.btn-mark-read:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Mark-as-read removal animation ---- */
+
+.tab-item--removing {
+  animation: slide-out 0.3s ease forwards;
+}
+
+@keyframes slide-out {
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+    max-height: 0;
+    padding: 0;
+    margin: 0;
+    border: none;
+    overflow: hidden;
+  }
+}
+
+/* ---- Empty state ---- */
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.empty-state-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.empty-state-text {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-subtext {
+  font-size: 0.9375rem;
+  color: var(--color-text-secondary);
+}

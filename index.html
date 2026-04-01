@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f97316">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Floo">
+  <meta name="description" content="Your reading queue">
+
+  <title>Floo</title>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Floo</h1>
+    <button id="logout-btn" class="header-btn" hidden aria-label="Log out">Log out</button>
+  </header>
+
+  <!-- Login screen -->
+  <section id="login-screen" class="app-main" role="main" hidden>
+    <form id="login-form" class="login-form" autocomplete="on" novalidate>
+      <h2 class="login-heading">Sign in</h2>
+
+      <details id="config-details" class="config-section">
+        <summary>Supabase configuration</summary>
+        <div class="form-group">
+          <label for="supabase-url">Supabase URL</label>
+          <input
+            type="url"
+            id="supabase-url"
+            name="supabase-url"
+            placeholder="https://your-project.supabase.co"
+            autocomplete="url"
+            required
+          >
+        </div>
+        <div class="form-group">
+          <label for="anon-key">Anon key</label>
+          <input
+            type="text"
+            id="anon-key"
+            name="anon-key"
+            placeholder="eyJhbGciOi..."
+            autocomplete="off"
+            required
+          >
+        </div>
+      </details>
+
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          placeholder="you@example.com"
+          autocomplete="email"
+          required
+        >
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          placeholder="Password"
+          autocomplete="current-password"
+          required
+        >
+      </div>
+
+      <p id="login-error" class="error-message" role="alert" hidden></p>
+
+      <button type="submit" id="login-submit" class="btn btn-primary">Sign in</button>
+    </form>
+  </section>
+
+  <!-- Authenticated content -->
+  <main id="app-content" class="app-main" role="main" hidden>
+    <div class="list-toolbar">
+      <div class="toolbar-left">
+        <span id="user-email" class="user-email"></span>
+        <span id="tab-count" class="tab-count" hidden></span>
+      </div>
+      <button id="refresh-btn" class="header-btn" aria-label="Refresh reading list">Refresh</button>
+    </div>
+    <div id="fetch-error" class="fetch-error" role="alert" hidden>
+      <p>Could not load your reading list. Check your connection and try again.</p>
+    </div>
+    <div id="loading-indicator" class="loading" hidden>
+      <p>Loading your reading list&hellip;</p>
+    </div>
+    <ul id="tabs-list" class="tabs-list" aria-label="Reading list"></ul>
+    <div id="empty-state" class="empty-state" hidden>
+      <p class="empty-state-icon" aria-hidden="true">&#128218;</p>
+      <p class="empty-state-text">Nothing to read right now.</p>
+      <p class="empty-state-subtext">Tabs you mark in Brave will appear here.</p>
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <p>Floo &mdash; your reading queue</p>
+  </footer>
+</body>
+</html>
