@@ -420,6 +420,9 @@ function renderTabs(tabs) {
     link.appendChild(titleEl);
     link.appendChild(metaEl);
 
+    const actions = document.createElement('div');
+    actions.className = 'tab-actions';
+
     const markBtn = document.createElement('button');
     markBtn.className = 'btn-mark-read';
     markBtn.textContent = 'Done';
@@ -430,8 +433,21 @@ function renderTabs(tabs) {
       markAsRead(tab.id, li);
     });
 
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn-delete';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.setAttribute('aria-label', `Delete "${tab.title || tab.url}"`);
+    deleteBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      confirmDelete(tab.id, li, actions, deleteBtn);
+    });
+
+    actions.appendChild(markBtn);
+    actions.appendChild(deleteBtn);
+
     li.appendChild(link);
-    li.appendChild(markBtn);
+    li.appendChild(actions);
     dom.tabsList.appendChild(li);
   });
 }
@@ -539,6 +555,130 @@ async function markAsRead(tabId, listItem) {
     }
     listItem.classList.remove('tab-item--removing');
     console.error('Error marking tab as read:', err);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Delete                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Show an inline confirmation state on the delete button.
+ * First tap: "Delete" → "Sure?" + "No". Second tap on "Sure?": deletes.
+ *
+ * @param {string}      tabId      The tab's UUID.
+ * @param {HTMLElement} listItem   The <li> element.
+ * @param {HTMLElement} actionsEl  The .tab-actions container.
+ * @param {HTMLElement} deleteBtn  The original delete button.
+ */
+function confirmDelete(tabId, listItem, actionsEl, deleteBtn) {
+  // Replace actions area with confirm prompt
+  actionsEl.innerHTML = '';
+  actionsEl.classList.add('tab-actions--confirm');
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'btn-delete-confirm';
+  confirmBtn.textContent = 'Sure?';
+  confirmBtn.setAttribute('aria-label', 'Confirm delete');
+  confirmBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    deleteTab(tabId, listItem);
+  });
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn-delete-cancel';
+  cancelBtn.textContent = 'No';
+  cancelBtn.setAttribute('aria-label', 'Cancel delete');
+  cancelBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Restore original buttons
+    actionsEl.classList.remove('tab-actions--confirm');
+    actionsEl.innerHTML = '';
+    actionsEl.appendChild(deleteBtn);
+    actionsEl.insertBefore(
+      (() => {
+        // Re-create the Done button in original state
+        const markBtn = document.createElement('button');
+        markBtn.className = 'btn-mark-read';
+        markBtn.textContent = 'Done';
+        markBtn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          markAsRead(tabId, listItem);
+        });
+        return markBtn;
+      })(),
+      deleteBtn
+    );
+  });
+
+  actionsEl.appendChild(confirmBtn);
+  actionsEl.appendChild(cancelBtn);
+}
+
+/**
+ * Delete a tab permanently via Supabase DELETE, then remove from DOM.
+ *
+ * @param {string}      tabId     The tab's UUID.
+ * @param {HTMLElement} listItem  The <li> to remove on success.
+ */
+async function deleteTab(tabId, listItem) {
+  const token = await getValidToken();
+  if (!token) {
+    handleLogout();
+    return;
+  }
+
+  const config = getStoredConfig();
+
+  try {
+    const response = await fetch(
+      `${config.supabaseUrl}/rest/v1/tabs?id=eq.${tabId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          ...authHeaders(token, config.anonKey),
+          'Prefer': 'return=minimal',
+        },
+      }
+    );
+
+    if (response.status === 401) {
+      handleLogout();
+      return;
+    }
+
+    if (!response.ok) {
+      console.error('Failed to delete tab:', response.status);
+      return;
+    }
+
+    if (navigator.vibrate) {
+      navigator.vibrate(10);
+    }
+
+    listItem.classList.add('tab-item--removing');
+    listItem.addEventListener('animationend', () => {
+      listItem.remove();
+      updateTabCount();
+      if (dom.tabsList.children.length === 0) {
+        dom.emptyState.hidden = false;
+      }
+    }, { once: true });
+
+    setTimeout(() => {
+      if (listItem.parentNode) {
+        listItem.remove();
+        updateTabCount();
+        if (dom.tabsList.children.length === 0) {
+          dom.emptyState.hidden = false;
+        }
+      }
+    }, 400);
+  } catch (err) {
+    console.error('Error deleting tab:', err);
   }
 }
 
