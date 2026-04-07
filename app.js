@@ -174,7 +174,7 @@ function authHeaders(token, anonKey) {
  */
 function handleGoogleSignIn() {
   const config = getStoredConfig();
-  const redirectTo = encodeURIComponent('https://tommcfarlin.github.io/floo-network/');
+  const redirectTo = encodeURIComponent(window.location.origin + window.location.pathname);
   window.location.href = `${config.supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${redirectTo}`;
 }
 
@@ -481,6 +481,11 @@ async function markAsRead(tabId, listItem) {
       }
       console.error('Failed to mark as read:', response.status);
       return;
+    }
+
+    // Haptic feedback on success (supported in Safari 16.4+)
+    if (navigator.vibrate) {
+      navigator.vibrate(10);
     }
 
     // Animate removal

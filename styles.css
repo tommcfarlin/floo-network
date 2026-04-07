@@ -331,6 +331,9 @@ button,
   text-decoration: none;
   color: inherit;
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0.05);
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .tab-link:active {
