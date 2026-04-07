@@ -11,6 +11,23 @@
  */
 
 /* ------------------------------------------------------------------ */
+/*  Utilities                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Decode HTML entities in a string (e.g. &amp; → &).
+ * Some sites emit raw entities in their <title> tag.
+ *
+ * @param {string} str
+ * @return {string}
+ */
+function decodeHtmlEntities(str) {
+  const el = document.createElement('textarea');
+  el.innerHTML = str;
+  return el.value;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Constants                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -400,7 +417,7 @@ function renderTabs(tabs) {
 
     const titleEl = document.createElement('span');
     titleEl.className = 'tab-title';
-    titleEl.textContent = tab.title || tab.url;
+    titleEl.textContent = decodeHtmlEntities(tab.title || tab.url);
 
     const metaEl = document.createElement('span');
     metaEl.className = 'tab-meta';

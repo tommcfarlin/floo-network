@@ -1,4 +1,4 @@
-const CACHE_NAME = 'floo-v4';
+const CACHE_NAME = 'floo-v5';
 
 const APP_SHELL = [
   './',
