@@ -179,6 +179,25 @@ function handleGoogleSignIn() {
 }
 
 /**
+ * Extract the email from a Supabase JWT access token.
+ * The payload is a base64url-encoded JSON object.
+ *
+ * @param {string} token  JWT access token.
+ * @return {string|null}  Email string, or null if not found.
+ */
+function emailFromJwt(token) {
+  try {
+    const payload = token.split('.')[1];
+    // base64url → base64, then decode
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const data = JSON.parse(json);
+    return data.email || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check whether the current URL fragment contains an OAuth callback
  * from Supabase (access_token, refresh_token, expires_at).
  * If so, parse and persist the tokens, clean the URL, and return true.
@@ -201,11 +220,15 @@ function handleOAuthCallback() {
     return false;
   }
 
-  saveTokens({
-    access_token: accessToken,
-    refresh_token: refreshToken || '',
-    expires_at: parseInt(expiresAt || '0', 10),
-  });
+  const email = emailFromJwt(accessToken);
+  saveTokens(
+    {
+      access_token: accessToken,
+      refresh_token: refreshToken || '',
+      expires_at: parseInt(expiresAt || '0', 10),
+    },
+    email
+  );
 
   // Remove the fragment from the URL so it is not re-processed on reload
   history.replaceState(null, '', window.location.pathname + window.location.search);
