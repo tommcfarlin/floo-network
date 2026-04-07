@@ -396,6 +396,7 @@ async function fetchTabs() {
  */
 function renderTabs(tabs) {
   dom.tabsList.innerHTML = '';
+  closeOpenSwipeItem();
 
   if (!tabs || tabs.length === 0) {
     dom.emptyState.hidden = false;
@@ -408,6 +409,15 @@ function renderTabs(tabs) {
     const li = document.createElement('li');
     li.className = 'tab-item';
     li.dataset.tabId = tab.id;
+
+    // Action buttons sit behind the content, revealed on left-swipe
+    const swipeActions = document.createElement('div');
+    swipeActions.className = 'tab-swipe-actions';
+    buildSwipeActions(tab.id, li, swipeActions);
+
+    // Sliding content layer
+    const content = document.createElement('div');
+    content.className = 'tab-item-content';
 
     const link = document.createElement('a');
     link.href = tab.url;
@@ -436,35 +446,12 @@ function renderTabs(tabs) {
 
     link.appendChild(titleEl);
     link.appendChild(metaEl);
+    content.appendChild(link);
 
-    const actions = document.createElement('div');
-    actions.className = 'tab-actions';
+    li.appendChild(swipeActions);
+    li.appendChild(content);
 
-    const markBtn = document.createElement('button');
-    markBtn.className = 'btn-mark-read';
-    markBtn.textContent = 'Done';
-    markBtn.setAttribute('aria-label', `Mark "${tab.title || tab.url}" as read`);
-    markBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      markAsRead(tab.id, li);
-    });
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'btn-delete';
-    deleteBtn.textContent = 'Delete';
-    deleteBtn.setAttribute('aria-label', `Delete "${tab.title || tab.url}"`);
-    deleteBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      confirmDelete(tab.id, li, actions, deleteBtn);
-    });
-
-    actions.appendChild(markBtn);
-    actions.appendChild(deleteBtn);
-
-    li.appendChild(link);
-    li.appendChild(actions);
+    attachSwipeGesture(li);
     dom.tabsList.appendChild(li);
   });
 }
@@ -576,31 +563,66 @@ async function markAsRead(tabId, listItem) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Delete                                                            */
+/*  Swipe-to-reveal                                                   */
 /* ------------------------------------------------------------------ */
 
+const SWIPE_ACTIONS_WIDTH = 136; // px — must match --swipe-actions-width in CSS
+let openSwipeItem = null;
+
+function closeOpenSwipeItem() {
+  if (!openSwipeItem) return;
+  const content = openSwipeItem.querySelector('.tab-item-content');
+  if (content) {
+    content.style.transition = '';
+    content.style.transform = '';
+  }
+  openSwipeItem.classList.remove('tab-item--open');
+  openSwipeItem = null;
+}
+
 /**
- * Show an inline confirmation state on the delete button.
- * First tap: "Delete" → "Sure?" + "No". Second tap on "Sure?": deletes.
- *
- * @param {string}      tabId      The tab's UUID.
- * @param {HTMLElement} listItem   The <li> element.
- * @param {HTMLElement} actionsEl  The .tab-actions container.
- * @param {HTMLElement} deleteBtn  The original delete button.
+ * Build (or rebuild) the Done + Delete buttons inside the swipe actions panel.
+ * Called on initial render and after a delete confirmation is cancelled.
  */
-function confirmDelete(tabId, listItem, actionsEl, deleteBtn) {
-  // Replace actions area with confirm prompt
-  actionsEl.innerHTML = '';
-  actionsEl.classList.add('tab-actions--confirm');
+function buildSwipeActions(tabId, li, swipeActionsEl) {
+  swipeActionsEl.innerHTML = '';
+
+  const markBtn = document.createElement('button');
+  markBtn.className = 'btn-mark-read';
+  markBtn.textContent = 'Done';
+  markBtn.setAttribute('aria-label', 'Mark as read');
+  markBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    markAsRead(tabId, li);
+  });
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'btn-delete';
+  deleteBtn.textContent = 'Delete';
+  deleteBtn.setAttribute('aria-label', 'Delete');
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    confirmDelete(tabId, li, swipeActionsEl);
+  });
+
+  swipeActionsEl.appendChild(markBtn);
+  swipeActionsEl.appendChild(deleteBtn);
+}
+
+/**
+ * Replace swipe actions with Sure?/No confirmation buttons.
+ * Tapping No rebuilds the original Done/Delete buttons.
+ */
+function confirmDelete(tabId, li, swipeActionsEl) {
+  swipeActionsEl.innerHTML = '';
 
   const confirmBtn = document.createElement('button');
   confirmBtn.className = 'btn-delete-confirm';
   confirmBtn.textContent = 'Sure?';
   confirmBtn.setAttribute('aria-label', 'Confirm delete');
   confirmBtn.addEventListener('click', (e) => {
-    e.preventDefault();
     e.stopPropagation();
-    deleteTab(tabId, listItem);
+    deleteTab(tabId, li);
   });
 
   const cancelBtn = document.createElement('button');
@@ -608,31 +630,86 @@ function confirmDelete(tabId, listItem, actionsEl, deleteBtn) {
   cancelBtn.textContent = 'No';
   cancelBtn.setAttribute('aria-label', 'Cancel delete');
   cancelBtn.addEventListener('click', (e) => {
-    e.preventDefault();
     e.stopPropagation();
-    // Restore original buttons
-    actionsEl.classList.remove('tab-actions--confirm');
-    actionsEl.innerHTML = '';
-    actionsEl.appendChild(deleteBtn);
-    actionsEl.insertBefore(
-      (() => {
-        // Re-create the Done button in original state
-        const markBtn = document.createElement('button');
-        markBtn.className = 'btn-mark-read';
-        markBtn.textContent = 'Done';
-        markBtn.addEventListener('click', (ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          markAsRead(tabId, listItem);
-        });
-        return markBtn;
-      })(),
-      deleteBtn
-    );
+    buildSwipeActions(tabId, li, swipeActionsEl);
   });
 
-  actionsEl.appendChild(confirmBtn);
-  actionsEl.appendChild(cancelBtn);
+  swipeActionsEl.appendChild(confirmBtn);
+  swipeActionsEl.appendChild(cancelBtn);
+}
+
+/**
+ * Attach touch-based swipe-to-reveal gesture to a list item.
+ * Left-swipe reveals Done/Delete; right-swipe or content-tap closes.
+ * Only one item can be open at a time.
+ *
+ * @param {HTMLElement} li  The .tab-item <li> element.
+ */
+function attachSwipeGesture(li) {
+  const content = li.querySelector('.tab-item-content');
+  let startX = 0;
+  let startY = 0;
+  let currentTranslate = 0;
+  let isTracking = false;
+  let isHorizontal = null;
+
+  content.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    currentTranslate = li.classList.contains('tab-item--open') ? -SWIPE_ACTIONS_WIDTH : 0;
+    isTracking = true;
+    isHorizontal = null;
+    content.style.transition = 'none';
+  }, { passive: true });
+
+  content.addEventListener('touchmove', (e) => {
+    if (!isTracking) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+
+    // Wait for enough movement to determine direction
+    if (isHorizontal === null) {
+      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+      isHorizontal = Math.abs(dx) >= Math.abs(dy);
+    }
+
+    if (!isHorizontal) {
+      isTracking = false;
+      return;
+    }
+
+    e.preventDefault();
+    const base = li.classList.contains('tab-item--open') ? -SWIPE_ACTIONS_WIDTH : 0;
+    currentTranslate = Math.min(0, Math.max(-SWIPE_ACTIONS_WIDTH, base + dx));
+    content.style.transform = `translateX(${currentTranslate}px)`;
+  }, { passive: false });
+
+  content.addEventListener('touchend', () => {
+    if (!isTracking || !isHorizontal) {
+      isTracking = false;
+      return;
+    }
+    isTracking = false;
+    content.style.transition = '';
+
+    if (currentTranslate < -(SWIPE_ACTIONS_WIDTH / 2)) {
+      if (openSwipeItem && openSwipeItem !== li) closeOpenSwipeItem();
+      content.style.transform = `translateX(-${SWIPE_ACTIONS_WIDTH}px)`;
+      li.classList.add('tab-item--open');
+      openSwipeItem = li;
+    } else {
+      content.style.transform = '';
+      li.classList.remove('tab-item--open');
+      if (openSwipeItem === li) openSwipeItem = null;
+    }
+  });
+
+  // Tap on content while open → close
+  content.addEventListener('click', () => {
+    if (li.classList.contains('tab-item--open')) {
+      closeOpenSwipeItem();
+    }
+  });
 }
 
 /**

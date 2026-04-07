@@ -306,19 +306,25 @@ button,
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
 .tab-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  position: relative;
+  overflow: hidden;
   border-bottom: 1px solid var(--color-border);
-  transition: opacity 0.2s ease;
 }
 
 .tab-item:last-child {
   border-bottom: none;
+}
+
+/* Sliding content layer — sits on top of the action buttons */
+.tab-item-content {
+  display: flex;
+  align-items: center;
+  background: var(--color-bg);
+  transition: transform 0.25s ease;
+  will-change: transform;
 }
 
 .tab-link {
@@ -364,42 +370,38 @@ button,
   /* inherits color from .tab-meta */
 }
 
-/* ---- Tab actions (Done + Delete) ---- */
+/* ---- Swipe-to-reveal action panel ---- */
 
-.tab-actions {
-  flex-shrink: 0;
+.tab-swipe-actions {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 136px; /* SWIPE_ACTIONS_WIDTH — keep in sync with JS constant */
   display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
   align-items: stretch;
 }
 
-.tab-actions--confirm {
-  flex-direction: row;
-  gap: 0.375rem;
-}
-
-/* ---- Mark as read button ---- */
+/* ---- Action buttons (revealed on swipe) ---- */
 
 .btn-mark-read {
-  flex-shrink: 0;
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  font-size: 0.8125rem;
-  font-weight: 500;
+  flex: 1;
+  background: var(--color-success);
+  border: none;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
   touch-action: manipulation;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: filter 0.1s ease;
 }
 
 .btn-mark-read:active {
-  border-color: var(--color-success);
-  color: var(--color-success);
+  filter: brightness(0.85);
 }
 
 .btn-mark-read:disabled {
@@ -410,54 +412,63 @@ button,
 /* ---- Delete button ---- */
 
 .btn-delete {
-  flex-shrink: 0;
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-  touch-action: manipulation;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.btn-delete:active {
-  border-color: var(--color-error);
-  color: var(--color-error);
-}
-
-/* ---- Delete confirm buttons ---- */
-
-.btn-delete-confirm {
-  background: none;
-  border: 1px solid var(--color-error);
-  color: var(--color-error);
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  font-size: 0.8125rem;
+  flex: 1;
+  background: var(--color-error);
+  border: none;
+  color: #ffffff;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
   touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: filter 0.1s ease;
+}
+
+.btn-delete:active {
+  filter: brightness(0.85);
+}
+
+/* ---- Delete confirm buttons ---- */
+
+.btn-delete-confirm {
+  flex: 1;
+  background: var(--color-error);
+  border: none;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.btn-delete-confirm:active {
+  filter: brightness(0.85);
 }
 
 .btn-delete-cancel {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  font-size: 0.8125rem;
+  flex: 1;
+  background: #6b7280;
+  border: none;
+  color: #ffffff;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
   touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.btn-delete-cancel:active {
+  filter: brightness(0.85);
 }
 
 /* ---- Mark-as-read removal animation ---- */
