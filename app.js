@@ -784,6 +784,14 @@ dom.googleSigninBtn.addEventListener('click', handleGoogleSignIn);
 dom.logoutBtn.addEventListener('click', handleLogout);
 dom.refreshBtn.addEventListener('click', fetchTabs);
 
+// Auto-refresh when the user switches back to the app (e.g. after saving
+// a tab in Brave and returning to the PWA to find their list updated).
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !dom.appContent.hidden) {
+    fetchTabs();
+  }
+});
+
 /* ------------------------------------------------------------------ */
 /*  Init                                                              */
 /* ------------------------------------------------------------------ */
