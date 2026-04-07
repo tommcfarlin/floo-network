@@ -4,6 +4,10 @@
  * Handles service worker registration, authentication,
  * reading list display, and mark-as-read functionality.
  * All Supabase communication uses raw fetch — no JS client.
+ *
+ * Supabase URL and anon key are provided by config.js (FLOO_CONFIG).
+ * Auth uses Google SSO via Supabase OAuth (implicit flow).
+ * Only auth tokens and user email are stored in localStorage.
  */
 
 /* ------------------------------------------------------------------ */
@@ -11,8 +15,6 @@
 /* ------------------------------------------------------------------ */
 
 const STORAGE_KEYS = Object.freeze({
-  SUPABASE_URL: 'floo_supabase_url',
-  SUPABASE_ANON_KEY: 'floo_supabase_anon_key',
   ACCESS_TOKEN: 'floo_access_token',
   REFRESH_TOKEN: 'floo_refresh_token',
   TOKEN_EXPIRES_AT: 'floo_token_expires_at',
@@ -26,14 +28,7 @@ const STORAGE_KEYS = Object.freeze({
 const dom = {
   loginScreen: document.getElementById('login-screen'),
   appContent: document.getElementById('app-content'),
-  loginForm: document.getElementById('login-form'),
-  loginError: document.getElementById('login-error'),
-  loginSubmit: document.getElementById('login-submit'),
-  configDetails: document.getElementById('config-details'),
-  supabaseUrl: document.getElementById('supabase-url'),
-  anonKey: document.getElementById('anon-key'),
-  email: document.getElementById('email'),
-  password: document.getElementById('password'),
+  googleSigninBtn: document.getElementById('google-signin-btn'),
   logoutBtn: document.getElementById('logout-btn'),
   refreshBtn: document.getElementById('refresh-btn'),
   userEmail: document.getElementById('user-email'),
@@ -51,7 +46,7 @@ const dom = {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('./sw.js')
       .then((registration) => {
         console.log('SW registered, scope:', registration.scope);
       })
@@ -67,8 +62,8 @@ if ('serviceWorker' in navigator) {
 
 function getStoredConfig() {
   return {
-    supabaseUrl: localStorage.getItem(STORAGE_KEYS.SUPABASE_URL),
-    anonKey: localStorage.getItem(STORAGE_KEYS.SUPABASE_ANON_KEY),
+    supabaseUrl: FLOO_CONFIG.SUPABASE_URL,
+    anonKey: FLOO_CONFIG.SUPABASE_ANON_KEY,
     accessToken: localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN),
     refreshToken: localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN),
     expiresAt: parseInt(localStorage.getItem(STORAGE_KEYS.TOKEN_EXPIRES_AT) || '0', 10),
@@ -83,15 +78,6 @@ function saveTokens(data, email) {
   if (email) {
     localStorage.setItem(STORAGE_KEYS.USER_EMAIL, email);
   }
-}
-
-function saveConfig(url, anonKey) {
-  const clean = url.replace(/\/+$/, '');
-  if (!clean.startsWith('https://')) {
-    throw new Error('Supabase URL must use HTTPS.');
-  }
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_URL, clean);
-  localStorage.setItem(STORAGE_KEYS.SUPABASE_ANON_KEY, anonKey);
 }
 
 function clearAuth() {
@@ -114,7 +100,7 @@ function isTokenValid() {
  */
 async function refreshAccessToken() {
   const config = getStoredConfig();
-  if (!config.supabaseUrl || !config.anonKey || !config.refreshToken) {
+  if (!config.refreshToken) {
     return false;
   }
 
@@ -165,7 +151,7 @@ async function getValidToken() {
 /**
  * Build standard auth headers for Supabase REST calls.
  *
- * @param {string} token  Access token.
+ * @param {string} token    Access token.
  * @param {string} anonKey  Supabase anon key.
  * @return {Object}
  */
@@ -178,84 +164,53 @@ function authHeaders(token, anonKey) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Login                                                             */
+/*  Login — Google SSO                                                */
 /* ------------------------------------------------------------------ */
 
-async function handleLogin(event) {
-  event.preventDefault();
-
-  const emailVal = dom.email.value.trim();
-  const passwordVal = dom.password.value;
-  const urlVal = dom.supabaseUrl.value.trim();
-  const keyVal = dom.anonKey.value.trim();
-
-  // Hide any previous error
-  showError('');
-
-  // Save config if provided (first time or changed)
-  if (urlVal && keyVal) {
-    try {
-      saveConfig(urlVal, keyVal);
-    } catch (err) {
-      showError(err.message);
-      return;
-    }
-  }
-
+/**
+ * Redirect the user to Supabase's Google OAuth authorize endpoint.
+ * Supabase will handle the Google consent screen and redirect back
+ * to the PWA with tokens in the URL fragment (implicit flow).
+ */
+function handleGoogleSignIn() {
   const config = getStoredConfig();
-  if (!config.supabaseUrl || !config.anonKey) {
-    showError('Supabase URL and anon key are required. Open the configuration section above.');
-    dom.configDetails.open = true;
-    return;
-  }
-
-  if (!emailVal || !passwordVal) {
-    showError('Email and password are required.');
-    return;
-  }
-
-  dom.loginSubmit.disabled = true;
-  dom.loginSubmit.textContent = 'Signing in\u2026';
-
-  try {
-    const response = await fetch(
-      `${config.supabaseUrl}/auth/v1/token?grant_type=password`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': config.anonKey,
-        },
-        body: JSON.stringify({ email: emailVal, password: passwordVal }),
-      }
-    );
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      const message = body.error_description || body.msg || body.error || 'Login failed.';
-      showError(message);
-      return;
-    }
-
-    const data = await response.json();
-    saveTokens(data, emailVal);
-    showApp();
-  } catch (err) {
-    showError(err.message || 'Network error during login.');
-  } finally {
-    dom.loginSubmit.disabled = false;
-    dom.loginSubmit.textContent = 'Sign in';
-  }
+  const redirectTo = encodeURIComponent('https://tommcfarlin.github.io/floo-network/');
+  window.location.href = `${config.supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${redirectTo}`;
 }
 
-function showError(message) {
-  if (!message) {
-    dom.loginError.hidden = true;
-    dom.loginError.textContent = '';
-    return;
+/**
+ * Check whether the current URL fragment contains an OAuth callback
+ * from Supabase (access_token, refresh_token, expires_at).
+ * If so, parse and persist the tokens, clean the URL, and return true.
+ *
+ * @return {boolean} True if an OAuth callback was detected and handled.
+ */
+function handleOAuthCallback() {
+  const hash = window.location.hash;
+  if (!hash || !hash.includes('access_token')) {
+    return false;
   }
-  dom.loginError.textContent = message;
-  dom.loginError.hidden = false;
+
+  // Parse key=value pairs from the fragment (strip leading #)
+  const params = new URLSearchParams(hash.slice(1));
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  const expiresAt = params.get('expires_at');
+
+  if (!accessToken) {
+    return false;
+  }
+
+  saveTokens({
+    access_token: accessToken,
+    refresh_token: refreshToken || '',
+    expires_at: parseInt(expiresAt || '0', 10),
+  });
+
+  // Remove the fragment from the URL so it is not re-processed on reload
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+
+  return true;
 }
 
 /* ------------------------------------------------------------------ */
@@ -266,24 +221,6 @@ function showLogin() {
   dom.loginScreen.hidden = false;
   dom.appContent.hidden = true;
   dom.logoutBtn.hidden = true;
-
-  // Pre-fill config fields if already stored
-  const config = getStoredConfig();
-  if (config.supabaseUrl) {
-    dom.supabaseUrl.value = config.supabaseUrl;
-  }
-  if (config.anonKey) {
-    dom.anonKey.value = config.anonKey;
-  }
-  if (config.email) {
-    dom.email.value = config.email;
-  }
-  // Collapse config section if already configured
-  if (config.supabaseUrl && config.anonKey) {
-    dom.configDetails.open = false;
-  } else {
-    dom.configDetails.open = true;
-  }
 }
 
 function showApp() {
@@ -293,9 +230,6 @@ function showApp() {
 
   const config = getStoredConfig();
   dom.userEmail.textContent = config.email || '';
-
-  // Clear password field for security
-  dom.password.value = '';
 
   fetchTabs();
 }
@@ -499,7 +433,7 @@ function updateTabCount() {
 /**
  * Mark a tab as read via Supabase PATCH, then remove from DOM.
  *
- * @param {string} tabId  The tab's UUID.
+ * @param {string} tabId      The tab's UUID.
  * @param {HTMLElement} listItem  The <li> to remove on success.
  */
 async function markAsRead(tabId, listItem) {
@@ -584,7 +518,7 @@ async function markAsRead(tabId, listItem) {
 /*  Event listeners                                                   */
 /* ------------------------------------------------------------------ */
 
-dom.loginForm.addEventListener('submit', handleLogin);
+dom.googleSigninBtn.addEventListener('click', handleGoogleSignIn);
 dom.logoutBtn.addEventListener('click', handleLogout);
 dom.refreshBtn.addEventListener('click', fetchTabs);
 
@@ -593,10 +527,19 @@ dom.refreshBtn.addEventListener('click', fetchTabs);
 /* ------------------------------------------------------------------ */
 
 (async function init() {
+  // Handle OAuth callback first — Supabase redirects back here with
+  // tokens in the URL fragment after the Google consent screen.
+  const wasCallback = handleOAuthCallback();
+
   const token = await getValidToken();
   if (token) {
     showApp();
   } else {
+    if (wasCallback) {
+      // Callback was detected but we still could not get a valid token —
+      // something went wrong during the OAuth flow.
+      console.error('OAuth callback detected but no valid token found.');
+    }
     showLogin();
   }
 })();

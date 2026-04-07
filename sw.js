@@ -1,10 +1,11 @@
-const CACHE_NAME = 'floo-v1';
+const CACHE_NAME = 'floo-v2';
 
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './config.js',
   './manifest.json'
 ];
 
