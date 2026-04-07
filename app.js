@@ -54,6 +54,7 @@ const dom = {
   loadingIndicator: document.getElementById('loading-indicator'),
   tabCount: document.getElementById('tab-count'),
   fetchError: document.getElementById('fetch-error'),
+  filterBar: document.getElementById('filter-bar'),
 };
 
 /* ------------------------------------------------------------------ */
@@ -261,12 +262,22 @@ function showLogin() {
   dom.loginScreen.hidden = false;
   dom.appContent.hidden = true;
   dom.logoutBtn.hidden = true;
+  dom.filterBar.hidden = true;
 }
 
 function showApp() {
   dom.loginScreen.hidden = true;
   dom.appContent.hidden = false;
   dom.logoutBtn.hidden = false;
+  dom.filterBar.hidden = false;
+
+  // Reset filter manually rather than calling setFilter('all') because allTabs
+  // is empty here — calling setFilter would trigger renderTabs([]) and briefly
+  // flash the empty state before fetchTabs() resolves.
+  activeFilter = 'all';
+  document.querySelectorAll('.filter-tab').forEach((btn) => {
+    btn.classList.toggle('filter-tab--active', btn.dataset.filter === 'all');
+  });
 
   const config = getStoredConfig();
   dom.userEmail.textContent = config.email || '';
@@ -276,6 +287,8 @@ function showApp() {
 
 function handleLogout() {
   clearAuth();
+  allTabs = [];
+  activeFilter = 'all';
   dom.tabsList.innerHTML = '';
   dom.emptyState.hidden = true;
   showLogin();
@@ -342,6 +355,44 @@ function extractDomain(urlStr) {
 }
 
 /**
+ * Infer a content type from a URL.
+ * Rules are checked in priority order; 'article' is the default.
+ *
+ * @param {string} url  Full URL.
+ * @return {'video'|'thread'|'article'|'other'}
+ */
+function detectType(url) {
+  let hostname, pathname;
+  try {
+    const parsed = new URL(url);
+    hostname = parsed.hostname.replace(/^www\./, '');
+    pathname = parsed.pathname;
+  } catch {
+    return 'article';
+  }
+
+  // Video
+  const videoDomains = ['youtube.com', 'youtu.be', 'vimeo.com', 'tiktok.com', 'twitch.tv'];
+  if (videoDomains.includes(hostname)) return 'video';
+  if (hostname === 'instagram.com' && pathname.startsWith('/reel/')) return 'video';
+
+  // Thread
+  if (
+    (hostname === 'x.com' || hostname === 'twitter.com') &&
+    /^\/[^/]+\/status\//.test(pathname)
+  ) return 'thread';
+  if (hostname === 'reddit.com' && /\/r\/[^/]+\/comments\//.test(pathname)) return 'thread';
+  if (hostname === 'threads.net') return 'thread';
+
+  // Other
+  const otherDomains = ['github.com', 'stackoverflow.com', 'stackexchange.com'];
+  if (otherDomains.includes(hostname)) return 'other';
+  if (hostname.startsWith('docs.') || hostname === 'developer.apple.com') return 'other';
+
+  return 'article';
+}
+
+/**
  * Fetch unread tabs from Supabase and render the list.
  */
 async function fetchTabs() {
@@ -378,8 +429,12 @@ async function fetchTabs() {
       return;
     }
 
-    const tabs = await response.json();
-    renderTabs(tabs);
+    allTabs = await response.json();
+    const filtered =
+      activeFilter === 'all'
+        ? allTabs
+        : allTabs.filter((tab) => detectType(tab.url) === activeFilter);
+    renderTabs(filtered);
     updateTabCount();
   } catch (err) {
     console.error('Error fetching tabs:', err);
@@ -425,6 +480,17 @@ function renderTabs(tabs) {
     link.rel = 'noopener';
     link.className = 'tab-link';
 
+    const faviconEl = document.createElement('img');
+    faviconEl.className = 'tab-favicon';
+    faviconEl.src = `https://www.google.com/s2/favicons?domain=${extractDomain(tab.url)}&sz=32`;
+    faviconEl.alt = '';
+    faviconEl.width = 20;
+    faviconEl.height = 20;
+    faviconEl.addEventListener('error', () => { faviconEl.hidden = true; });
+
+    const textEl = document.createElement('span');
+    textEl.className = 'tab-text';
+
     const titleEl = document.createElement('span');
     titleEl.className = 'tab-title';
     titleEl.textContent = decodeHtmlEntities(tab.title || tab.url);
@@ -444,8 +510,11 @@ function renderTabs(tabs) {
     metaEl.appendChild(document.createTextNode(' \u00B7 '));
     metaEl.appendChild(timeEl);
 
-    link.appendChild(titleEl);
-    link.appendChild(metaEl);
+    textEl.appendChild(titleEl);
+    textEl.appendChild(metaEl);
+
+    link.appendChild(faviconEl);
+    link.appendChild(textEl);
     content.appendChild(link);
 
     li.appendChild(swipeActions);
@@ -460,7 +529,7 @@ function renderTabs(tabs) {
  * Update the tab count badge in the toolbar.
  */
 function updateTabCount() {
-  const count = dom.tabsList.children.length;
+  const count = allTabs.length;
   if (count > 0) {
     dom.tabCount.textContent = `${count} tab${count === 1 ? '' : 's'}`;
     dom.tabCount.hidden = false;
@@ -531,6 +600,8 @@ async function markAsRead(tabId, listItem) {
       navigator.vibrate(10);
     }
 
+    allTabs = allTabs.filter((t) => t.id !== tabId);
+
     // Animate removal
     listItem.classList.add('tab-item--removing');
 
@@ -567,6 +638,8 @@ async function markAsRead(tabId, listItem) {
 /* ------------------------------------------------------------------ */
 
 const SWIPE_ACTIONS_WIDTH = 136; // px — must match --swipe-actions-width in CSS
+let allTabs = [];
+let activeFilter = 'all';
 let openSwipeItem = null;
 
 function closeOpenSwipeItem() {
@@ -578,6 +651,23 @@ function closeOpenSwipeItem() {
   }
   openSwipeItem.classList.remove('tab-item--open');
   openSwipeItem = null;
+}
+
+/**
+ * Set the active filter and re-render the visible list.
+ *
+ * @param {string} filter  One of 'all', 'article', 'video', 'thread', 'other'.
+ */
+function setFilter(filter) {
+  activeFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach((btn) => {
+    btn.classList.toggle('filter-tab--active', btn.dataset.filter === filter);
+  });
+  const filtered =
+    filter === 'all'
+      ? allTabs
+      : allTabs.filter((tab) => detectType(tab.url) === filter);
+  renderTabs(filtered);
 }
 
 /**
@@ -753,6 +843,8 @@ async function deleteTab(tabId, listItem) {
       navigator.vibrate(10);
     }
 
+    allTabs = allTabs.filter((t) => t.id !== tabId);
+
     listItem.classList.add('tab-item--removing');
     listItem.addEventListener('animationend', () => {
       listItem.remove();
@@ -783,6 +875,9 @@ async function deleteTab(tabId, listItem) {
 dom.googleSigninBtn.addEventListener('click', handleGoogleSignIn);
 dom.logoutBtn.addEventListener('click', handleLogout);
 dom.refreshBtn.addEventListener('click', fetchTabs);
+document.querySelectorAll('.filter-tab').forEach((btn) => {
+  btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+});
 
 // Auto-refresh when the user switches back to the app (e.g. after saving
 // a tab in Brave and returning to the PWA to find their list updated).

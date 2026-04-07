@@ -50,6 +50,13 @@
       </div>
       <button id="refresh-btn" class="header-btn" aria-label="Refresh reading list">Refresh</button>
     </div>
+    <nav id="filter-bar" class="filter-bar" hidden aria-label="Filter by content type">
+      <button class="filter-tab filter-tab--active" data-filter="all">All</button>
+      <button class="filter-tab" data-filter="article">Article</button>
+      <button class="filter-tab" data-filter="video">Video</button>
+      <button class="filter-tab" data-filter="thread">Thread</button>
+      <button class="filter-tab" data-filter="other">Other</button>
+    </nav>
     <div id="fetch-error" class="fetch-error" role="alert" hidden>
       <p>Could not load your reading list. Check your connection and try again.</p>
     </div>
