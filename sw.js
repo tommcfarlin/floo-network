@@ -10,19 +10,20 @@ const APP_SHELL = [
 ];
 
 /**
- * Install event — precache the app shell.
+ * Install event — precache the app shell and activate immediately.
+ * skipWaiting() means the new SW takes over as soon as it installs
+ * rather than waiting for all tabs to close first.
  */
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
   );
+  self.skipWaiting();
 });
 
 /**
- * Activate event — clean up old caches so users get fresh content
- * after a deploy. We intentionally do NOT call skipWaiting() here;
- * the new service worker will activate on the next navigation,
- * which avoids mid-session asset mismatches.
+ * Activate event — clean up old caches and claim all open clients
+ * immediately so the updated app shell serves without a reload.
  */
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -32,7 +33,7 @@ self.addEventListener('activate', (event) => {
           .filter((key) => key !== CACHE_NAME)
           .map((key) => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim())
   );
 });
 
