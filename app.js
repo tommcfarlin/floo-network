@@ -269,26 +269,30 @@ function showApp() {
   dom.loginScreen.hidden = true;
   dom.appContent.hidden = false;
   dom.logoutBtn.hidden = false;
-  dom.filterBar.hidden = false;
+  dom.filterBar.hidden = true; // Tabs is default; filter bar only shows in Queue
 
-  // Reset filter manually rather than calling setFilter('all') because allTabs
-  // is empty here — calling setFilter would trigger renderTabs([]) and briefly
-  // flash the empty state before fetchTabs() resolves.
+  // Reset to Tabs view without triggering a fetch yet (fetchOpenTabs() below handles it).
+  activeView = 'tabs';
   activeFilter = 'all';
-  document.querySelectorAll('.filter-tab').forEach((btn) => {
-    btn.classList.toggle('filter-tab--active', btn.dataset.filter === 'all');
-  });
+  document.querySelectorAll( '.view-tab' ).forEach( ( btn ) => {
+    btn.classList.toggle( 'view-tab--active', btn.dataset.view === 'tabs' );
+  } );
+  document.querySelectorAll( '.filter-tab' ).forEach( ( btn ) => {
+    btn.classList.toggle( 'filter-tab--active', btn.dataset.filter === 'all' );
+  } );
 
   const config = getStoredConfig();
   dom.userEmail.textContent = config.email || '';
 
-  fetchTabs();
+  fetchOpenTabs();
 }
 
 function handleLogout() {
   clearAuth();
   allTabs = [];
+  allOpenTabs = [];
   activeFilter = 'all';
+  activeView = 'tabs';
   dom.tabsList.innerHTML = '';
   dom.emptyState.hidden = true;
   showLogin();
@@ -442,6 +446,116 @@ async function fetchTabs() {
   } finally {
     dom.loadingIndicator.hidden = true;
   }
+}
+
+/**
+ * Fetch open tabs from Supabase and render the Tabs view.
+ */
+async function fetchOpenTabs() {
+  const token = await getValidToken();
+  if (!token) {
+    handleLogout();
+    return;
+  }
+
+  const config = getStoredConfig();
+  dom.loadingIndicator.hidden = false;
+  dom.tabsList.innerHTML = '';
+  dom.emptyState.hidden = true;
+  dom.fetchError.hidden = true;
+  dom.tabCount.hidden = true;
+
+  try {
+    const response = await fetch(
+      `${config.supabaseUrl}/rest/v1/open_tabs?order=synced_at.desc&select=id,url,title,synced_at`,
+      {
+        method: 'GET',
+        headers: authHeaders(token, config.anonKey),
+      }
+    );
+
+    if (response.status === 401) {
+      handleLogout();
+      return;
+    }
+
+    if (!response.ok) {
+      console.error('Failed to fetch open tabs:', response.status);
+      dom.fetchError.hidden = false;
+      return;
+    }
+
+    allOpenTabs = await response.json();
+    renderOpenTabs(allOpenTabs);
+  } catch (err) {
+    console.error('Error fetching open tabs:', err);
+    dom.fetchError.hidden = false;
+  } finally {
+    dom.loadingIndicator.hidden = true;
+  }
+}
+
+/**
+ * Render the open tabs list. No swipe actions — items are read-only links.
+ *
+ * @param {Array} tabs  Array of open_tabs rows from Supabase.
+ */
+function renderOpenTabs(tabs) {
+  dom.tabsList.innerHTML = '';
+  closeOpenSwipeItem();
+
+  if (!tabs || tabs.length === 0) {
+    const textEl = dom.emptyState.querySelector('.empty-state-text');
+    const subtextEl = dom.emptyState.querySelector('.empty-state-subtext');
+    if (textEl) textEl.textContent = 'No open tabs found.';
+    if (subtextEl) subtextEl.textContent = 'Make sure Floo is running in Brave.';
+    dom.emptyState.hidden = false;
+    return;
+  }
+
+  dom.emptyState.hidden = true;
+
+  tabs.forEach((tab) => {
+    const li = document.createElement('li');
+    li.className = 'tab-item';
+
+    const content = document.createElement('div');
+    content.className = 'tab-item-content';
+
+    const link = document.createElement('a');
+    link.href = tab.url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.className = 'tab-link';
+
+    const faviconEl = document.createElement('img');
+    faviconEl.className = 'tab-favicon';
+    faviconEl.src = `https://www.google.com/s2/favicons?domain=${extractDomain(tab.url)}&sz=32`;
+    faviconEl.alt = '';
+    faviconEl.width = 20;
+    faviconEl.height = 20;
+    faviconEl.addEventListener('error', () => { faviconEl.hidden = true; });
+
+    const textEl = document.createElement('span');
+    textEl.className = 'tab-text';
+
+    const titleEl = document.createElement('span');
+    titleEl.className = 'tab-title';
+    titleEl.textContent = decodeHtmlEntities(tab.title || tab.url);
+
+    const domainEl = document.createElement('span');
+    domainEl.className = 'tab-meta';
+    domainEl.textContent = extractDomain(tab.url);
+
+    textEl.appendChild(titleEl);
+    textEl.appendChild(domainEl);
+    link.appendChild(faviconEl);
+    link.appendChild(textEl);
+    content.appendChild(link);
+    li.appendChild(content);
+
+    dom.tabsList.appendChild(li);
+  });
 }
 
 /**
@@ -641,6 +755,8 @@ const SWIPE_ACTIONS_WIDTH = 136; // px — must match --swipe-actions-width in C
 let allTabs = [];
 let activeFilter = 'all';
 let openSwipeItem = null;
+let activeView = 'tabs';
+let allOpenTabs = [];
 
 function closeOpenSwipeItem() {
   if (!openSwipeItem) return;
@@ -668,6 +784,31 @@ function setFilter(filter) {
       ? allTabs
       : allTabs.filter((tab) => detectType(tab.url) === filter);
   renderTabs(filtered);
+}
+
+/**
+ * Switch between top-level views: 'tabs' (open tabs mirror) or 'queue' (reading list).
+ *
+ * @param {string} view  'tabs' or 'queue'.
+ */
+function setView(view) {
+  if (view === activeView) return;
+  activeView = view;
+  document.querySelectorAll('.view-tab').forEach((btn) => {
+    btn.classList.toggle('view-tab--active', btn.dataset.view === view);
+  });
+
+  if (view === 'tabs') {
+    dom.filterBar.hidden = true;
+    fetchOpenTabs();
+  } else {
+    dom.filterBar.hidden = false;
+    const textEl = dom.emptyState.querySelector('.empty-state-text');
+    const subtextEl = dom.emptyState.querySelector('.empty-state-subtext');
+    if (textEl) textEl.textContent = 'Nothing to read right now.';
+    if (subtextEl) subtextEl.textContent = 'Tabs you mark in Brave will appear here.';
+    fetchTabs();
+  }
 }
 
 /**
@@ -874,7 +1015,16 @@ async function deleteTab(tabId, listItem) {
 
 dom.googleSigninBtn.addEventListener('click', handleGoogleSignIn);
 dom.logoutBtn.addEventListener('click', handleLogout);
-dom.refreshBtn.addEventListener('click', fetchTabs);
+dom.refreshBtn.addEventListener('click', () => {
+  if (activeView === 'tabs') {
+    fetchOpenTabs();
+  } else {
+    fetchTabs();
+  }
+});
+document.querySelectorAll('.view-tab').forEach((btn) => {
+  btn.addEventListener('click', () => setView(btn.dataset.view));
+});
 document.querySelectorAll('.filter-tab').forEach((btn) => {
   btn.addEventListener('click', () => setFilter(btn.dataset.filter));
 });
@@ -883,7 +1033,11 @@ document.querySelectorAll('.filter-tab').forEach((btn) => {
 // a tab in Brave and returning to the PWA to find their list updated).
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && !dom.appContent.hidden) {
-    fetchTabs();
+    if (activeView === 'tabs') {
+      fetchOpenTabs();
+    } else {
+      fetchTabs();
+    }
   }
 });
 
