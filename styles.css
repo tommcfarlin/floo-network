@@ -306,11 +306,14 @@ button,
 /* ---- Filter bar (Queue view only) ---- */
 
 .filter-bar {
-  display: flex;
   margin: 0 -1.25rem 1rem;
   border-bottom: 1px solid var(--color-border);
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.filter-bar:not([hidden]) {
+  display: flex;
 }
 
 .filter-tab {
