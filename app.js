@@ -309,6 +309,7 @@ function handleLogout() {
   clearAuth();
   allTabs = [];
   allOpenTabs = [];
+  allArchiveTabs = [];
   activeFilter = 'all';
   activeView = 'tabs';
   dom.tabsList.innerHTML = '';
@@ -577,6 +578,136 @@ function renderOpenTabs(tabs) {
 }
 
 /**
+ * Fetch archived (read) tabs from Supabase and render the Archive view.
+ */
+async function fetchArchive() {
+  const token = await getValidToken();
+  if (!token) {
+    handleLogout();
+    return;
+  }
+
+  const config = getStoredConfig();
+  dom.loadingIndicator.hidden = false;
+  dom.tabsList.innerHTML = '';
+  dom.emptyState.hidden = true;
+  dom.fetchError.hidden = true;
+  dom.tabCount.hidden = true;
+
+  try {
+    const response = await fetch(
+      `${config.supabaseUrl}/rest/v1/tabs?is_read=eq.true&order=created_at.desc&select=id,url,title,created_at`,
+      {
+        method: 'GET',
+        headers: authHeaders(token, config.anonKey),
+      }
+    );
+
+    if (response.status === 401) {
+      handleLogout();
+      return;
+    }
+
+    if (!response.ok) {
+      console.error('Failed to fetch archive:', response.status);
+      dom.fetchError.hidden = false;
+      return;
+    }
+
+    allArchiveTabs = await response.json();
+    renderArchive(allArchiveTabs);
+  } catch (err) {
+    console.error('Error fetching archive:', err);
+    dom.fetchError.hidden = false;
+  } finally {
+    dom.loadingIndicator.hidden = true;
+  }
+}
+
+/**
+ * Render archived tabs with swipe-to-delete (no Done button).
+ *
+ * @param {Array} tabs  Array of archived tab rows from Supabase.
+ */
+function renderArchive(tabs) {
+  dom.tabsList.innerHTML = '';
+  closeOpenSwipeItem();
+
+  if (!tabs || tabs.length === 0) {
+    const textEl = dom.emptyState.querySelector('.empty-state-text');
+    const subtextEl = dom.emptyState.querySelector('.empty-state-subtext');
+    if (textEl) textEl.textContent = 'No archived items.';
+    if (subtextEl) subtextEl.textContent = 'Items you mark as done will appear here.';
+    dom.emptyState.hidden = false;
+    return;
+  }
+
+  dom.emptyState.hidden = true;
+
+  tabs.forEach((tab) => {
+    const li = document.createElement('li');
+    li.className = 'tab-item';
+    li.dataset.tabId = tab.id;
+
+    const swipeActions = document.createElement('div');
+    swipeActions.className = 'tab-swipe-actions';
+    buildArchiveSwipeActions(tab.id, li, swipeActions);
+
+    const content = document.createElement('div');
+    content.className = 'tab-item-content';
+
+    const link = document.createElement('a');
+    link.href = tab.url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.className = 'tab-link';
+
+    const faviconEl = document.createElement('img');
+    faviconEl.className = 'tab-favicon';
+    faviconEl.src = `https://www.google.com/s2/favicons?domain=${extractDomain(tab.url)}&sz=32`;
+    faviconEl.alt = '';
+    faviconEl.width = 20;
+    faviconEl.height = 20;
+    faviconEl.addEventListener('error', () => { faviconEl.hidden = true; });
+
+    const textEl = document.createElement('span');
+    textEl.className = 'tab-text';
+
+    const titleEl = document.createElement('span');
+    titleEl.className = 'tab-title';
+    titleEl.textContent = decodeHtmlEntities(tab.title || tab.url);
+
+    const metaEl = document.createElement('span');
+    metaEl.className = 'tab-meta';
+
+    const domainEl = document.createElement('span');
+    domainEl.className = 'tab-domain';
+    domainEl.textContent = extractDomain(tab.url);
+
+    const timeEl = document.createElement('span');
+    timeEl.className = 'tab-time';
+    timeEl.textContent = relativeTime(tab.created_at);
+
+    metaEl.appendChild(domainEl);
+    metaEl.appendChild(document.createTextNode(' \u00B7 '));
+    metaEl.appendChild(timeEl);
+
+    textEl.appendChild(titleEl);
+    textEl.appendChild(metaEl);
+
+    link.appendChild(faviconEl);
+    link.appendChild(textEl);
+    content.appendChild(link);
+
+    li.appendChild(swipeActions);
+    li.appendChild(content);
+
+    attachSwipeGesture(li);
+    dom.tabsList.appendChild(li);
+  });
+}
+
+/**
  * Render a list of tabs into the DOM.
  *
  * @param {Array} tabs  Array of tab objects from Supabase.
@@ -775,6 +906,7 @@ let activeFilter = 'all';
 let openSwipeItem = null;
 let activeView = 'tabs';
 let allOpenTabs = [];
+let allArchiveTabs = [];
 
 function closeOpenSwipeItem() {
   if (!openSwipeItem) return;
@@ -807,7 +939,7 @@ function setFilter(filter) {
 /**
  * Switch between top-level views: 'tabs' (open tabs mirror) or 'queue' (reading list).
  *
- * @param {string} view  'tabs' or 'queue'.
+ * @param {string} view  'tabs', 'queue', or 'archive'.
  */
 function setView(view) {
   if (view === activeView) return;
@@ -819,13 +951,16 @@ function setView(view) {
   if (view === 'tabs') {
     dom.filterBar.hidden = true;
     fetchOpenTabs();
-  } else {
+  } else if (view === 'queue') {
     dom.filterBar.hidden = false;
     const textEl = dom.emptyState.querySelector('.empty-state-text');
     const subtextEl = dom.emptyState.querySelector('.empty-state-subtext');
     if (textEl) textEl.textContent = 'Nothing to read right now.';
     if (subtextEl) subtextEl.textContent = 'Tabs you mark in Brave will appear here.';
     fetchTabs();
+  } else if (view === 'archive') {
+    dom.filterBar.hidden = true;
+    fetchArchive();
   }
 }
 
@@ -856,6 +991,53 @@ function buildSwipeActions(tabId, li, swipeActionsEl) {
 
   swipeActionsEl.appendChild(markBtn);
   swipeActionsEl.appendChild(deleteBtn);
+}
+
+/**
+ * Build a Delete-only swipe actions panel for the Archive view.
+ */
+function buildArchiveSwipeActions(tabId, li, swipeActionsEl) {
+  swipeActionsEl.innerHTML = '';
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'btn-delete';
+  deleteBtn.textContent = 'Delete';
+  deleteBtn.setAttribute('aria-label', 'Delete');
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    confirmArchiveDelete(tabId, li, swipeActionsEl);
+  });
+
+  swipeActionsEl.appendChild(deleteBtn);
+}
+
+/**
+ * Replace archive swipe actions with Sure?/No confirmation buttons.
+ * Tapping No rebuilds the archive Delete button.
+ */
+function confirmArchiveDelete(tabId, li, swipeActionsEl) {
+  swipeActionsEl.innerHTML = '';
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'btn-delete-confirm';
+  confirmBtn.textContent = 'Sure?';
+  confirmBtn.setAttribute('aria-label', 'Confirm delete');
+  confirmBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    deleteTab(tabId, li);
+  });
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn-delete-cancel';
+  cancelBtn.textContent = 'No';
+  cancelBtn.setAttribute('aria-label', 'Cancel delete');
+  cancelBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    buildArchiveSwipeActions(tabId, li, swipeActionsEl);
+  });
+
+  swipeActionsEl.appendChild(confirmBtn);
+  swipeActionsEl.appendChild(cancelBtn);
 }
 
 /**
@@ -1002,7 +1184,11 @@ async function deleteTab(tabId, listItem) {
       navigator.vibrate(10);
     }
 
-    allTabs = allTabs.filter((t) => t.id !== tabId);
+    if (activeView === 'archive') {
+      allArchiveTabs = allArchiveTabs.filter((t) => t.id !== tabId);
+    } else {
+      allTabs = allTabs.filter((t) => t.id !== tabId);
+    }
 
     listItem.classList.add('tab-item--removing');
     listItem.addEventListener('animationend', () => {
@@ -1036,8 +1222,10 @@ dom.logoutBtn.addEventListener('click', handleLogout);
 dom.refreshBtn.addEventListener('click', () => {
   if (activeView === 'tabs') {
     fetchOpenTabs();
-  } else {
+  } else if (activeView === 'queue') {
     fetchTabs();
+  } else if (activeView === 'archive') {
+    fetchArchive();
   }
 });
 document.querySelectorAll('.view-tab').forEach((btn) => {
@@ -1053,8 +1241,10 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && !dom.appContent.hidden) {
     if (activeView === 'tabs') {
       fetchOpenTabs();
-    } else {
+    } else if (activeView === 'queue') {
       fetchTabs();
+    } else if (activeView === 'archive') {
+      fetchArchive();
     }
   }
 });
