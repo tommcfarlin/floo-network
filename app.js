@@ -67,6 +67,24 @@ if ('serviceWorker' in navigator) {
       .register('./sw.js')
       .then((registration) => {
         console.log('SW registered, scope:', registration.scope);
+
+        // When a new SW finishes installing and takes over, reload so the
+        // updated app shell is served immediately — critical for iOS home
+        // screen PWAs where there is no pull-to-refresh or hard-reload.
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
+        });
+
+        // Check for updates whenever the app comes back to the foreground.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            registration.update();
+          }
+        });
       })
       .catch((error) => {
         console.error('SW registration failed:', error);
