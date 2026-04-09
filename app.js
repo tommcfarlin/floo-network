@@ -31,6 +31,11 @@ function decodeHtmlEntities(str) {
 /*  Constants                                                         */
 /* ------------------------------------------------------------------ */
 
+/** 20x20 gray circle used as favicon fallback when the real one fails to load. */
+const FAVICON_PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="9" fill="#9ca3af"/></svg>'
+);
+
 const STORAGE_KEYS = Object.freeze({
   ACCESS_TOKEN: 'floo_access_token',
   REFRESH_TOKEN: 'floo_refresh_token',
@@ -54,6 +59,7 @@ const dom = {
   loadingIndicator: document.getElementById('loading-indicator'),
   tabCount: document.getElementById('tab-count'),
   fetchError: document.getElementById('fetch-error'),
+  offlineBanner: document.getElementById('offline-banner'),
   filterBar: document.getElementById('filter-bar'),
 };
 
@@ -432,6 +438,7 @@ async function fetchTabs() {
   dom.tabsList.innerHTML = '';
   dom.emptyState.hidden = true;
   dom.fetchError.hidden = true;
+  dom.offlineBanner.hidden = true;
   dom.tabCount.hidden = true;
 
   try {
@@ -463,7 +470,17 @@ async function fetchTabs() {
     updateTabCount();
   } catch (err) {
     console.error('Error fetching tabs:', err);
-    dom.fetchError.hidden = false;
+    if (allTabs.length > 0) {
+      dom.offlineBanner.hidden = false;
+      const filtered =
+        activeFilter === 'all'
+          ? allTabs
+          : allTabs.filter((tab) => detectType(tab.url) === activeFilter);
+      renderTabs(filtered);
+      updateTabCount();
+    } else {
+      dom.fetchError.hidden = false;
+    }
   } finally {
     dom.loadingIndicator.hidden = true;
   }
@@ -484,6 +501,7 @@ async function fetchOpenTabs() {
   dom.tabsList.innerHTML = '';
   dom.emptyState.hidden = true;
   dom.fetchError.hidden = true;
+  dom.offlineBanner.hidden = true;
   dom.tabCount.hidden = true;
 
   try {
@@ -510,7 +528,12 @@ async function fetchOpenTabs() {
     renderOpenTabs(allOpenTabs);
   } catch (err) {
     console.error('Error fetching open tabs:', err);
-    dom.fetchError.hidden = false;
+    if (allOpenTabs.length > 0) {
+      dom.offlineBanner.hidden = false;
+      renderOpenTabs(allOpenTabs);
+    } else {
+      dom.fetchError.hidden = false;
+    }
   } finally {
     dom.loadingIndicator.hidden = true;
   }
@@ -555,7 +578,7 @@ function renderOpenTabs(tabs) {
     faviconEl.alt = '';
     faviconEl.width = 20;
     faviconEl.height = 20;
-    faviconEl.addEventListener('error', () => { faviconEl.hidden = true; });
+    faviconEl.addEventListener('error', () => { faviconEl.src = FAVICON_PLACEHOLDER; }, { once: true });
 
     const textEl = document.createElement('span');
     textEl.className = 'tab-text';
@@ -594,6 +617,7 @@ async function fetchArchive() {
   dom.tabsList.innerHTML = '';
   dom.emptyState.hidden = true;
   dom.fetchError.hidden = true;
+  dom.offlineBanner.hidden = true;
   dom.tabCount.hidden = true;
 
   try {
@@ -620,7 +644,12 @@ async function fetchArchive() {
     renderArchive(allArchiveTabs);
   } catch (err) {
     console.error('Error fetching archive:', err);
-    dom.fetchError.hidden = false;
+    if (allArchiveTabs.length > 0) {
+      dom.offlineBanner.hidden = false;
+      renderArchive(allArchiveTabs);
+    } else {
+      dom.fetchError.hidden = false;
+    }
   } finally {
     dom.loadingIndicator.hidden = true;
   }
@@ -670,7 +699,7 @@ function renderArchive(tabs) {
     faviconEl.alt = '';
     faviconEl.width = 20;
     faviconEl.height = 20;
-    faviconEl.addEventListener('error', () => { faviconEl.hidden = true; });
+    faviconEl.addEventListener('error', () => { faviconEl.src = FAVICON_PLACEHOLDER; }, { once: true });
 
     const textEl = document.createElement('span');
     textEl.className = 'tab-text';
@@ -719,6 +748,10 @@ function renderTabs(tabs) {
   closeOpenSwipeItem();
 
   if (!tabs || tabs.length === 0) {
+    const textEl = dom.emptyState.querySelector('.empty-state-text');
+    const subtextEl = dom.emptyState.querySelector('.empty-state-subtext');
+    if (textEl) textEl.textContent = 'Nothing to read right now.';
+    if (subtextEl) subtextEl.textContent = 'Tabs you mark in Brave will appear here.';
     dom.emptyState.hidden = false;
     return;
   }
@@ -751,7 +784,7 @@ function renderTabs(tabs) {
     faviconEl.alt = '';
     faviconEl.width = 20;
     faviconEl.height = 20;
-    faviconEl.addEventListener('error', () => { faviconEl.hidden = true; });
+    faviconEl.addEventListener('error', () => { faviconEl.src = FAVICON_PLACEHOLDER; }, { once: true });
 
     const textEl = document.createElement('span');
     textEl.className = 'tab-text';
@@ -788,6 +821,18 @@ function renderTabs(tabs) {
     attachSwipeGesture(li);
     dom.tabsList.appendChild(li);
   });
+
+  // Show a brief swipe-peek hint on the first Queue render per session.
+  if (!hasShownSwipePeek && tabs.length > 0) {
+    hasShownSwipePeek = true;
+    const firstContent = dom.tabsList.querySelector('.tab-item-content');
+    if (firstContent) {
+      firstContent.classList.add('tab-item-content--peek');
+      firstContent.addEventListener('animationend', () => {
+        firstContent.classList.remove('tab-item-content--peek');
+      }, { once: true });
+    }
+  }
 }
 
 /**
@@ -814,6 +859,19 @@ function updateTabCount() {
  * @param {HTMLElement} listItem  The <li> to remove on success.
  */
 async function markAsRead(tabId, listItem) {
+  if (!navigator.onLine) {
+    const markBtn = listItem.querySelector('.btn-mark-read');
+    if (markBtn) {
+      markBtn.textContent = 'Offline';
+      markBtn.classList.add('btn-mark-read--failed');
+      setTimeout(() => {
+        markBtn.textContent = 'Done';
+        markBtn.classList.remove('btn-mark-read--failed');
+      }, 2000);
+    }
+    return;
+  }
+
   const token = await getValidToken();
   if (!token) {
     handleLogout();
@@ -854,7 +912,12 @@ async function markAsRead(tabId, listItem) {
     if (!response.ok) {
       if (markBtn) {
         markBtn.disabled = false;
-        markBtn.textContent = 'Done';
+        markBtn.textContent = 'Failed';
+        markBtn.classList.add('btn-mark-read--failed');
+        setTimeout(() => {
+          markBtn.textContent = 'Done';
+          markBtn.classList.remove('btn-mark-read--failed');
+        }, 2000);
       }
       console.error('Failed to mark as read:', response.status);
       return;
@@ -891,7 +954,12 @@ async function markAsRead(tabId, listItem) {
   } catch (err) {
     if (markBtn) {
       markBtn.disabled = false;
-      markBtn.textContent = 'Done';
+      markBtn.textContent = 'Failed';
+      markBtn.classList.add('btn-mark-read--failed');
+      setTimeout(() => {
+        markBtn.textContent = 'Done';
+        markBtn.classList.remove('btn-mark-read--failed');
+      }, 2000);
     }
     listItem.classList.remove('tab-item--removing');
     console.error('Error marking tab as read:', err);
@@ -909,6 +977,7 @@ let openSwipeItem = null;
 let activeView = 'tabs';
 let allOpenTabs = [];
 let allArchiveTabs = [];
+let hasShownSwipePeek = false;
 let pollTimer = null;
 const POLL_INTERVAL = 30000; // 30 seconds
 
@@ -1167,6 +1236,26 @@ function attachSwipeGesture(li) {
  * @param {HTMLElement} listItem  The <li> to remove on success.
  */
 async function deleteTab(tabId, listItem) {
+  if (!navigator.onLine) {
+    const swipeActionsEl = listItem.querySelector('.tab-swipe-actions');
+    if (swipeActionsEl) {
+      swipeActionsEl.innerHTML = '';
+      const offlineBtn = document.createElement('button');
+      offlineBtn.className = 'btn-delete';
+      offlineBtn.textContent = 'Offline';
+      offlineBtn.disabled = true;
+      swipeActionsEl.appendChild(offlineBtn);
+      setTimeout(() => {
+        if (activeView === 'archive') {
+          buildArchiveSwipeActions(tabId, listItem, swipeActionsEl);
+        } else {
+          buildSwipeActions(tabId, listItem, swipeActionsEl);
+        }
+      }, 2000);
+    }
+    return;
+  }
+
   const token = await getValidToken();
   if (!token) {
     handleLogout();
@@ -1194,6 +1283,14 @@ async function deleteTab(tabId, listItem) {
 
     if (!response.ok) {
       console.error('Failed to delete tab:', response.status);
+      const swipeActionsEl = listItem.querySelector('.tab-swipe-actions');
+      if (swipeActionsEl) {
+        if (activeView === 'archive') {
+          buildArchiveSwipeActions(tabId, listItem, swipeActionsEl);
+        } else {
+          buildSwipeActions(tabId, listItem, swipeActionsEl);
+        }
+      }
       return;
     }
 
@@ -1227,6 +1324,14 @@ async function deleteTab(tabId, listItem) {
     }, 400);
   } catch (err) {
     console.error('Error deleting tab:', err);
+    const swipeActionsEl = listItem.querySelector('.tab-swipe-actions');
+    if (swipeActionsEl) {
+      if (activeView === 'archive') {
+        buildArchiveSwipeActions(tabId, listItem, swipeActionsEl);
+      } else {
+        buildSwipeActions(tabId, listItem, swipeActionsEl);
+      }
+    }
   }
 }
 

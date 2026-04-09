@@ -19,10 +19,10 @@
   --color-bg: #ffffff;
   --color-text: #1a1a1a;
   --color-text-secondary: #6b7280;
-  --color-accent: #f97316;
-  --color-accent-hover: #ea580c;
+  --color-accent: #2d7d46;
+  --color-accent-hover: #1e5c32;
   --color-border: #e5e7eb;
-  --color-surface: #f9fafb;
+  --color-surface: #f4f7f5;
   --color-error: #dc2626;
   --color-success: #16a34a;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -35,13 +35,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #111111;
+    --color-bg: #0d120d;
     --color-text: #f0f0f0;
     --color-text-secondary: #9ca3af;
-    --color-accent: #fb923c;
-    --color-accent-hover: #f97316;
+    --color-accent: #3da35a;
+    --color-accent-hover: #2d7d46;
     --color-border: #2d2d2d;
-    --color-surface: #1a1a1a;
+    --color-surface: #141a14;
     --color-error: #f87171;
     --color-success: #4ade80;
   }
@@ -314,6 +314,7 @@ button,
 
 .filter-bar:not([hidden]) {
   display: flex;
+  column-gap: 1px;
 }
 
 .filter-tab {
@@ -343,6 +344,22 @@ button,
 
 .filter-tab:active {
   opacity: 0.7;
+}
+
+/* ---- Offline banner ---- */
+
+.offline-banner {
+  text-align: center;
+  padding: 0.5rem 1rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.offline-banner p {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
 }
 
 /* ---- Fetch error ---- */
@@ -498,6 +515,10 @@ button,
   cursor: not-allowed;
 }
 
+.btn-mark-read--failed {
+  background: var(--color-error);
+}
+
 /* ---- Delete button ---- */
 
 .btn-delete {
@@ -576,6 +597,18 @@ button,
     border: none;
     overflow: hidden;
   }
+}
+
+/* ---- Swipe peek hint animation ---- */
+
+@keyframes swipe-peek {
+  0%   { transform: translateX(0); }
+  40%  { transform: translateX(-40px); }
+  100% { transform: translateX(0); }
+}
+
+.tab-item-content--peek {
+  animation: swipe-peek 0.4s ease-in-out;
 }
 
 /* ---- Empty state ---- */

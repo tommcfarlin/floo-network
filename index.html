@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f97316">
+  <meta name="theme-color" content="#2d7d46">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Floo">
@@ -62,6 +62,9 @@
       <button class="filter-tab" data-filter="thread">Thread</button>
       <button class="filter-tab" data-filter="other">Other</button>
     </nav>
+    <div id="offline-banner" class="offline-banner" role="status" hidden>
+      <p>Offline &mdash; showing cached data</p>
+    </div>
     <div id="fetch-error" class="fetch-error" role="alert" hidden>
       <p>Could not load your reading list. Check your connection and try again.</p>
     </div>
@@ -71,8 +74,8 @@
     <ul id="tabs-list" class="tabs-list" aria-label="Reading list"></ul>
     <div id="empty-state" class="empty-state" hidden>
       <p class="empty-state-icon" aria-hidden="true">&#128218;</p>
-      <p class="empty-state-text">Nothing to read right now.</p>
-      <p class="empty-state-subtext">Tabs you mark in Brave will appear here.</p>
+      <p class="empty-state-text">No items to show.</p>
+      <p class="empty-state-subtext">Check back later.</p>
     </div>
   </main>
 
