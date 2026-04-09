@@ -303,9 +303,11 @@ function showApp() {
   dom.userEmail.textContent = config.email || '';
 
   fetchOpenTabs();
+  startTabsPolling();
 }
 
 function handleLogout() {
+  stopTabsPolling();
   clearAuth();
   allTabs = [];
   allOpenTabs = [];
@@ -907,6 +909,8 @@ let openSwipeItem = null;
 let activeView = 'tabs';
 let allOpenTabs = [];
 let allArchiveTabs = [];
+let pollTimer = null;
+const POLL_INTERVAL = 30000; // 30 seconds
 
 function closeOpenSwipeItem() {
   if (!openSwipeItem) return;
@@ -936,6 +940,16 @@ function setFilter(filter) {
   renderTabs(filtered);
 }
 
+function startTabsPolling() {
+  stopTabsPolling();
+  pollTimer = setInterval(fetchOpenTabs, POLL_INTERVAL);
+}
+
+function stopTabsPolling() {
+  clearInterval(pollTimer);
+  pollTimer = null;
+}
+
 /**
  * Switch between top-level views: 'tabs' (open tabs mirror) or 'queue' (reading list).
  *
@@ -951,7 +965,9 @@ function setView(view) {
   if (view === 'tabs') {
     dom.filterBar.hidden = true;
     fetchOpenTabs();
+    startTabsPolling();
   } else if (view === 'queue') {
+    stopTabsPolling();
     dom.filterBar.hidden = false;
     const textEl = dom.emptyState.querySelector('.empty-state-text');
     const subtextEl = dom.emptyState.querySelector('.empty-state-subtext');
@@ -959,6 +975,7 @@ function setView(view) {
     if (subtextEl) subtextEl.textContent = 'Tabs you mark in Brave will appear here.';
     fetchTabs();
   } else if (view === 'archive') {
+    stopTabsPolling();
     dom.filterBar.hidden = true;
     fetchArchive();
   }
@@ -1241,11 +1258,14 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && !dom.appContent.hidden) {
     if (activeView === 'tabs') {
       fetchOpenTabs();
+      startTabsPolling();
     } else if (activeView === 'queue') {
       fetchTabs();
     } else if (activeView === 'archive') {
       fetchArchive();
     }
+  } else {
+    stopTabsPolling();
   }
 });
 
