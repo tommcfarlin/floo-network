@@ -67,12 +67,6 @@ const dom = {
 /*  Service worker registration                                       */
 /* ------------------------------------------------------------------ */
 
-/**
- * The version string embedded in this build. Must match pwa/version.json
- * at deploy time. Both are updated together on every release.
- */
-const APP_VERSION = '17';
-
 /** Timestamp of the last version check, used to throttle foreground checks. */
 let lastVersionCheck = 0;
 
@@ -87,9 +81,17 @@ if ('serviceWorker' in navigator) {
 }
 
 /**
- * Fetch version.json from the server (cache: 'no-store' bypasses both the
- * HTTP cache and the service worker cache) and compare to APP_VERSION.
- * If they differ, the user is on a stale build — show the update banner.
+ * Fetch version.json from the server and compare against the last version
+ * the user confirmed running (stored in localStorage).
+ *
+ * Using localStorage instead of a hardcoded APP_VERSION constant means the
+ * comparison survives a reload even if Safari serves a stale app.js from
+ * its HTTP cache — the stored version already reflects the server version
+ * the user last acknowledged, so the banner won't re-fire after an update.
+ *
+ * First load (no stored version): silently record the server version and
+ * return — no banner on a fresh install.
+ *
  * Fails silently when offline so the app remains usable from cache.
  */
 async function checkAppVersion() {
@@ -97,8 +99,14 @@ async function checkAppVersion() {
     const response = await fetch('./version.json', { cache: 'no-store' });
     if (!response.ok) return;
     const { version } = await response.json();
-    if (version !== APP_VERSION) {
-      showUpdateBanner();
+    const knownVersion = localStorage.getItem('floo_known_version');
+    if (!knownVersion) {
+      // First time seeing a version — record it and move on.
+      localStorage.setItem('floo_known_version', version);
+      return;
+    }
+    if (version !== knownVersion) {
+      showUpdateBanner(version);
     }
   } catch {
     // Offline or fetch failed — do nothing.
@@ -119,7 +127,7 @@ let updateBannerShown = false;
  * The entrance uses a CSS class transition (not a keyframe animation) applied
  * via double requestAnimationFrame to avoid Safari's stale hit-test region bug.
  */
-function showUpdateBanner() {
+function showUpdateBanner(serverVersion) {
   if (updateBannerShown) return;
   updateBannerShown = true;
 
@@ -136,9 +144,10 @@ function showUpdateBanner() {
   });
 
   updateBtn.addEventListener('click', () => {
-    // Clear all SW caches before reloading so the new app shell is fetched
-    // from the network rather than served stale from the SW cache.
-    // The SW will repopulate the cache on the next install event.
+    // Record the server version as known BEFORE reloading so that after the
+    // reload (regardless of which app.js Safari serves from cache) the stored
+    // version matches and the banner does not reappear.
+    localStorage.setItem('floo_known_version', serverVersion);
     caches.keys()
       .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
       .finally(() => window.location.reload(true));
