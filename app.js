@@ -71,7 +71,7 @@ const dom = {
  * The version string embedded in this build. Must match pwa/version.json
  * at deploy time. Both are updated together on every release.
  */
-const APP_VERSION = '16';
+const APP_VERSION = '17';
 
 /** Timestamp of the last version check, used to throttle foreground checks. */
 let lastVersionCheck = 0;
@@ -136,7 +136,12 @@ function showUpdateBanner() {
   });
 
   updateBtn.addEventListener('click', () => {
-    window.location.reload(true);
+    // Clear all SW caches before reloading so the new app shell is fetched
+    // from the network rather than served stale from the SW cache.
+    // The SW will repopulate the cache on the next install event.
+    caches.keys()
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .finally(() => window.location.reload(true));
   }, { once: true });
 
   dismissBtn.addEventListener('click', () => {
