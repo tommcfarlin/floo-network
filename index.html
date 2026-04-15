@@ -79,6 +79,15 @@
     </div>
   </main>
 
+  <!-- Update banner — shown when a new service worker is waiting -->
+  <div id="update-banner" class="update-banner" role="alert" hidden>
+    <p class="update-banner-text">A new version is available</p>
+    <div class="update-banner-actions">
+      <button id="update-banner-update" class="update-banner-btn update-banner-btn--update" aria-label="Update app now">Update</button>
+      <button id="update-banner-dismiss" class="update-banner-btn update-banner-btn--dismiss" aria-label="Dismiss update notification">&#x2715;</button>
+    </div>
+  </div>
+
   <footer class="app-footer">
     <p>Floo &mdash; your reading queue</p>
   </footer>

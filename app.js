@@ -67,16 +67,19 @@ const dom = {
 /*  Service worker registration                                       */
 /* ------------------------------------------------------------------ */
 
+/** Tracks the waiting SW for the update banner; null when no update is pending. */
+let pendingUpdateWorker = null;
+
+/** Timestamp of the last registration.update() call, used to throttle checks. */
+let lastUpdateCheck = 0;
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('./sw.js')
       .then((registration) => {
-        console.log('SW registered, scope:', registration.scope);
-
-        // When a new SW finishes installing and takes over, reload so the
-        // updated app shell is served immediately — critical for iOS home
-        // screen PWAs where there is no pull-to-refresh or hard-reload.
+        // Register controllerchange first so it is in place before any
+        // banner interaction can trigger SKIP_WAITING and fire the event.
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (!refreshing) {
@@ -85,10 +88,36 @@ if ('serviceWorker' in navigator) {
           }
         });
 
-        // Check for updates whenever the app comes back to the foreground.
+        // Show the update banner for a SW that is already waiting when the
+        // page loads (e.g. the user had the app open during a deploy).
+        if (registration.waiting) {
+          showUpdateBanner(registration.waiting);
+        }
+
+        // Watch for a new SW that installs while the page is open.
+        registration.addEventListener('updatefound', () => {
+          const incoming = registration.installing;
+          if (!incoming) return;
+
+          incoming.addEventListener('statechange', () => {
+            // `installed` + an existing controller means the new SW is
+            // waiting to take over — show the banner so the user can trigger
+            // the swap without closing and reopening the app.
+            if (incoming.state === 'installed' && navigator.serviceWorker.controller) {
+              showUpdateBanner(incoming);
+            }
+          });
+        });
+
+        // Check for a new SW version whenever the app returns to the foreground.
+        // Throttled to once per minute to avoid a network fetch on every app switch.
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
-            registration.update();
+            const now = Date.now();
+            if (now - lastUpdateCheck > 60_000) {
+              lastUpdateCheck = now;
+              registration.update();
+            }
           }
         });
       })
@@ -96,6 +125,42 @@ if ('serviceWorker' in navigator) {
         console.error('SW registration failed:', error);
       });
   });
+}
+
+/**
+ * Reveal the update banner and wire the Update and Dismiss buttons.
+ *
+ * Update: posts SKIP_WAITING to the waiting SW, which triggers
+ *   controllerchange → window.location.reload().
+ * Dismiss: hides the banner for this session. The banner will reappear
+ *   on next launch if the SW is still waiting.
+ *
+ * Guards against double-calls: if a banner is already showing for a
+ * pending worker, subsequent calls are ignored.
+ *
+ * @param {ServiceWorker} worker  The waiting service worker instance.
+ */
+function showUpdateBanner(worker) {
+  if (pendingUpdateWorker) return;
+  pendingUpdateWorker = worker;
+
+  const banner = document.getElementById('update-banner');
+  const updateBtn = document.getElementById('update-banner-update');
+  const dismissBtn = document.getElementById('update-banner-dismiss');
+  if (!banner || !updateBtn || !dismissBtn) return;
+
+  banner.hidden = false;
+
+  updateBtn.addEventListener('click', () => {
+    banner.hidden = true;
+    pendingUpdateWorker.postMessage({ type: 'SKIP_WAITING' });
+    pendingUpdateWorker = null;
+  }, { once: true });
+
+  dismissBtn.addEventListener('click', () => {
+    banner.hidden = true;
+    pendingUpdateWorker = null;
+  }, { once: true });
 }
 
 /* ------------------------------------------------------------------ */

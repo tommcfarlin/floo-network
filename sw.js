@@ -1,4 +1,4 @@
-const CACHE_NAME = 'floo-v13';
+const CACHE_NAME = 'floo-v14';
 
 const APP_SHELL = [
   './',
@@ -18,7 +18,20 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
   );
-  self.skipWaiting();
+  // Do NOT call skipWaiting() here — let the update banner in app.js
+  // control when the new SW takes over. This prevents silent reloads
+  // and gives the user a visible tap-to-update prompt instead.
+});
+
+/**
+ * Triggered by app.js when the user taps the update banner.
+ * Taking over immediately causes controllerchange to fire,
+ * which reloads the page and serves the new app shell.
+ */
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 /**
