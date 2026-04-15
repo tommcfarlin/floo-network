@@ -11,27 +11,13 @@ const APP_SHELL = [
 
 /**
  * Install event — precache the app shell and activate immediately.
- * skipWaiting() means the new SW takes over as soon as it installs
- * rather than waiting for all tabs to close first.
+ * skipWaiting() ensures the new SW takes over as soon as it installs.
  */
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
   );
-  // Do NOT call skipWaiting() here — let the update banner in app.js
-  // control when the new SW takes over. This prevents silent reloads
-  // and gives the user a visible tap-to-update prompt instead.
-});
-
-/**
- * Triggered by app.js when the user taps the update banner.
- * Taking over immediately causes controllerchange to fire,
- * which reloads the page and serves the new app shell.
- */
-self.addEventListener('message', (event) => {
-  if (event.data?.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  self.skipWaiting();
 });
 
 /**
@@ -53,16 +39,24 @@ self.addEventListener('activate', (event) => {
 /**
  * Fetch event — route requests by type:
  *
- * 1. Supabase API calls: network-first, so the reading list stays
+ * 1. version.json: always network-only — never cached, so the version
+ *    check in app.js always reflects the live deployed version.
+ * 2. Supabase API calls: network-first, so the reading list stays
  *    fresh when online but still works from cache when offline.
- * 2. Navigation & app shell assets: cache-first, falling back to
+ * 3. Navigation & app shell assets: cache-first, falling back to
  *    network. This keeps the shell instant on repeat visits.
- * 3. Everything else: network with no caching (avoids bloating the
+ * 4. Everything else: network with no caching (avoids bloating the
  *    cache with opaque cross-origin responses).
  */
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
+
+  // version.json — always fetch from network, never cache
+  if (url.pathname.endsWith('/version.json')) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   // Supabase API — network-first
   if (url.hostname.includes('supabase.co')) {

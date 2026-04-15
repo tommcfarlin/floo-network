@@ -67,59 +67,19 @@ const dom = {
 /*  Service worker registration                                       */
 /* ------------------------------------------------------------------ */
 
-/** Tracks the waiting SW for the update banner; null when no update is pending. */
-let pendingUpdateWorker = null;
+/**
+ * The version string embedded in this build. Must match pwa/version.json
+ * at deploy time. Both are updated together on every release.
+ */
+const APP_VERSION = '16';
 
-/** Timestamp of the last registration.update() call, used to throttle checks. */
-let lastUpdateCheck = 0;
+/** Timestamp of the last version check, used to throttle foreground checks. */
+let lastVersionCheck = 0;
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('./sw.js')
-      .then((registration) => {
-        // Register controllerchange first so it is in place before any
-        // banner interaction can trigger SKIP_WAITING and fire the event.
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (!refreshing) {
-            refreshing = true;
-            window.location.reload();
-          }
-        });
-
-        // Show the update banner for a SW that is already waiting when the
-        // page loads (e.g. the user had the app open during a deploy).
-        if (registration.waiting) {
-          showUpdateBanner(registration.waiting);
-        }
-
-        // Watch for a new SW that installs while the page is open.
-        // `updatefound` is unreliable in Safari standalone mode, so this is
-        // a secondary signal — the primary check is inside checkForUpdate().
-        registration.addEventListener('updatefound', () => {
-          const incoming = registration.installing;
-          if (!incoming) return;
-
-          incoming.addEventListener('statechange', () => {
-            if (incoming.state === 'installed' && navigator.serviceWorker.controller) {
-              showUpdateBanner(incoming);
-            }
-          });
-        });
-
-        // Check for a new SW version whenever the app returns to the foreground.
-        // Throttled to once per minute to avoid a network fetch on every app switch.
-        document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible') {
-            const now = Date.now();
-            if (now - lastUpdateCheck > 60_000) {
-              lastUpdateCheck = now;
-              checkForUpdate(registration);
-            }
-          }
-        });
-      })
       .catch((error) => {
         console.error('SW registration failed:', error);
       });
@@ -127,51 +87,41 @@ if ('serviceWorker' in navigator) {
 }
 
 /**
- * Trigger a SW update check and actively inspect the result.
- *
- * Safari standalone mode does not reliably fire `updatefound`, so after
- * calling registration.update() we interrogate the registration directly:
- * - If a SW is already waiting, show the banner immediately.
- * - If a SW is still installing, attach a statechange listener to catch
- *   the transition to `installed` (waiting).
- *
- * The `updatefound` listener in the registration block remains as a
- * secondary signal for browsers where it works correctly.
- *
- * @param {ServiceWorkerRegistration} registration
+ * Fetch version.json from the server (cache: 'no-store' bypasses both the
+ * HTTP cache and the service worker cache) and compare to APP_VERSION.
+ * If they differ, the user is on a stale build — show the update banner.
+ * Fails silently when offline so the app remains usable from cache.
  */
-function checkForUpdate(registration) {
-  registration.update().then((reg) => {
-    if (reg.waiting) {
-      showUpdateBanner(reg.waiting);
-      return;
+async function checkAppVersion() {
+  try {
+    const response = await fetch('./version.json', { cache: 'no-store' });
+    if (!response.ok) return;
+    const { version } = await response.json();
+    if (version !== APP_VERSION) {
+      showUpdateBanner();
     }
-    if (reg.installing) {
-      reg.installing.addEventListener('statechange', function () {
-        if (this.state === 'installed' && navigator.serviceWorker.controller) {
-          showUpdateBanner(this);
-        }
-      });
-    }
-  }).catch(() => {});
+  } catch {
+    // Offline or fetch failed — do nothing.
+  }
 }
+
+/** Guards against showing the banner more than once per session. */
+let updateBannerShown = false;
 
 /**
  * Reveal the update banner and wire the Update and Dismiss buttons.
  *
- * Update: posts SKIP_WAITING to the waiting SW, which triggers
- *   controllerchange → window.location.reload().
- * Dismiss: hides the banner for this session. The banner will reappear
- *   on next launch if the SW is still waiting.
+ * Update: forces a full reload with cache bypass so the new app shell
+ *   and assets are fetched fresh from the server.
+ * Dismiss: hides the banner for this session. On next launch the version
+ *   check runs again and will re-show the banner if still out of date.
  *
- * Guards against double-calls: if a banner is already showing for a
- * pending worker, subsequent calls are ignored.
- *
- * @param {ServiceWorker} worker  The waiting service worker instance.
+ * The entrance uses a CSS class transition (not a keyframe animation) applied
+ * via double requestAnimationFrame to avoid Safari's stale hit-test region bug.
  */
-function showUpdateBanner(worker) {
-  if (pendingUpdateWorker) return;
-  pendingUpdateWorker = worker;
+function showUpdateBanner() {
+  if (updateBannerShown) return;
+  updateBannerShown = true;
 
   const banner = document.getElementById('update-banner');
   const updateBtn = document.getElementById('update-banner-update');
@@ -179,10 +129,6 @@ function showUpdateBanner(worker) {
   if (!banner || !updateBtn || !dismissBtn) return;
 
   banner.hidden = false;
-  // Double rAF: first frame renders the initial translateY(100%) state,
-  // second frame applies the class so the CSS transition fires correctly.
-  // Using a keyframe animation caused Safari to stale the hit-test region
-  // at the off-screen position, making the buttons untappable.
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       banner.classList.add('update-banner--visible');
@@ -190,14 +136,12 @@ function showUpdateBanner(worker) {
   });
 
   updateBtn.addEventListener('click', () => {
-    banner.hidden = true;
-    pendingUpdateWorker.postMessage({ type: 'SKIP_WAITING' });
-    pendingUpdateWorker = null;
+    window.location.reload(true);
   }, { once: true });
 
   dismissBtn.addEventListener('click', () => {
     banner.hidden = true;
-    pendingUpdateWorker = null;
+    banner.classList.remove('update-banner--visible');
   }, { once: true });
 }
 
@@ -413,6 +357,7 @@ function showApp() {
 
   fetchOpenTabs();
   startTabsPolling();
+  checkAppVersion();
 }
 
 function handleLogout() {
@@ -1471,6 +1416,13 @@ document.addEventListener('visibilitychange', () => {
       fetchTabs();
     } else if (activeView === 'archive') {
       fetchArchive();
+    }
+
+    // Version check on foreground, throttled to once per 60 seconds.
+    const now = Date.now();
+    if (now - lastVersionCheck > 60_000) {
+      lastVersionCheck = now;
+      checkAppVersion();
     }
   } else {
     stopTabsPolling();
