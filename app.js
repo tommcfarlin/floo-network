@@ -179,6 +179,15 @@ function showUpdateBanner(worker) {
   if (!banner || !updateBtn || !dismissBtn) return;
 
   banner.hidden = false;
+  // Double rAF: first frame renders the initial translateY(100%) state,
+  // second frame applies the class so the CSS transition fires correctly.
+  // Using a keyframe animation caused Safari to stale the hit-test region
+  // at the off-screen position, making the buttons untappable.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      banner.classList.add('update-banner--visible');
+    });
+  });
 
   updateBtn.addEventListener('click', () => {
     banner.hidden = true;

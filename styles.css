@@ -365,7 +365,12 @@ button,
   background-color: var(--color-accent);
   color: #ffffff;
   z-index: 200;
-  animation: banner-slide-up 0.25s ease-out;
+  transform: translateY(100%);
+  transition: transform 0.25s ease-out;
+}
+
+.update-banner--visible {
+  transform: translateY(0);
 }
 
 .update-banner-text {
@@ -414,10 +419,6 @@ button,
   padding: 0.5rem 0.75rem;
 }
 
-@keyframes banner-slide-up {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
-}
 
 /* ---- Offline banner ---- */
 
