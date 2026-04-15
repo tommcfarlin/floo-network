@@ -95,14 +95,13 @@ if ('serviceWorker' in navigator) {
         }
 
         // Watch for a new SW that installs while the page is open.
+        // `updatefound` is unreliable in Safari standalone mode, so this is
+        // a secondary signal — the primary check is inside checkForUpdate().
         registration.addEventListener('updatefound', () => {
           const incoming = registration.installing;
           if (!incoming) return;
 
           incoming.addEventListener('statechange', () => {
-            // `installed` + an existing controller means the new SW is
-            // waiting to take over — show the banner so the user can trigger
-            // the swap without closing and reopening the app.
             if (incoming.state === 'installed' && navigator.serviceWorker.controller) {
               showUpdateBanner(incoming);
             }
@@ -116,7 +115,7 @@ if ('serviceWorker' in navigator) {
             const now = Date.now();
             if (now - lastUpdateCheck > 60_000) {
               lastUpdateCheck = now;
-              registration.update();
+              checkForUpdate(registration);
             }
           }
         });
@@ -125,6 +124,36 @@ if ('serviceWorker' in navigator) {
         console.error('SW registration failed:', error);
       });
   });
+}
+
+/**
+ * Trigger a SW update check and actively inspect the result.
+ *
+ * Safari standalone mode does not reliably fire `updatefound`, so after
+ * calling registration.update() we interrogate the registration directly:
+ * - If a SW is already waiting, show the banner immediately.
+ * - If a SW is still installing, attach a statechange listener to catch
+ *   the transition to `installed` (waiting).
+ *
+ * The `updatefound` listener in the registration block remains as a
+ * secondary signal for browsers where it works correctly.
+ *
+ * @param {ServiceWorkerRegistration} registration
+ */
+function checkForUpdate(registration) {
+  registration.update().then((reg) => {
+    if (reg.waiting) {
+      showUpdateBanner(reg.waiting);
+      return;
+    }
+    if (reg.installing) {
+      reg.installing.addEventListener('statechange', function () {
+        if (this.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBanner(this);
+        }
+      });
+    }
+  }).catch(() => {});
 }
 
 /**
